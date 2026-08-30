@@ -33,8 +33,9 @@ no_person_start = None
 RESET_TIME = 7
 WELCOME_DURATION = 3
 
-welcome_message = False
-welcome_start = 0
+# Show welcome banner when program starts
+welcome_message = True
+welcome_start = time.time()
 
 # ==========================================
 # FPS

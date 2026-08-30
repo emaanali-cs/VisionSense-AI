@@ -2,7 +2,7 @@ import cv2
 
 def open_camera():
 
-    ip = "192.168.1.44"
+    ip = "192.168.1.45"
 
     url = f"rtsp://admin:123456@{ip}:554/unicast/c1/s0/live"
 
