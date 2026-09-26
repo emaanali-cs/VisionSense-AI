@@ -118,7 +118,7 @@ flowchart TD
     subgraph CAMERA["app/camera.py - open_camera"]
         CM["CAMERA_MODE constant at line 11"]
         LAP["laptop branch<br/>VideoCapture 0, forced 1280x720"]
-        IPC["ip branch<br/>RTSP <camera-ip>:554 admin<br/>CAP_FFMPEG BUFFERSIZE 1 FPS 20"]
+        IPC["ip branch<br/>RTSP host, creds and port from placeholders<br/>CAP_FFMPEG BUFFERSIZE 1 FPS 20"]
         BAD["else - prints Invalid CAMERA_MODE<br/>returns None"]
     end
 
@@ -366,10 +366,8 @@ CAMERA_MODE = "laptop"   # or "ip"
 ```
 
 - `"laptop"` → `cv2.VideoCapture(0)`, forces `1280x720` (`app/camera.py:26-27`).
-- `"ip"` → builds an RTSP URL from a hardcoded IP, username, and password at `app/camera.py:35-37`, opened with `cv2.CAP_FFMPEG`; sets `CAP_PROP_BUFFERSIZE=1` and `CAP_PROP_FPS=20`.
+- `"ip"` → builds an RTSP URL from the host, credentials, and port you set at `app/camera.py:35-37`, opened with `cv2.CAP_FFMPEG`; sets `CAP_PROP_BUFFERSIZE=1` and `CAP_PROP_FPS=20`.
 - Anything else → prints `Invalid CAMERA_MODE` and returns `None`, which makes `main.py` print `Unable to connect to camera.` and exit.
-
-> ⚠️ The `ip` branch has **hardcoded plaintext credentials** (`[USERNAME]:[PASSWORD]` at `app/camera.py:37`) committed to version control. Rotate them, and move them to an env var before any public release.
 
 There is **no `.env` file and no `.env.example`**, and the code reads no environment variables at all.
 
@@ -536,7 +534,7 @@ All configuration is **hardcoded Python constants**. There is no `.env`, no `.en
 | Constant | File:Line | Value | Effect |
 |---|---|---|---|
 | `CAMERA_MODE` | `app/camera.py:11` | `"laptop"` | Camera source. `"laptop"` \| `"ip"`; any other value makes `open_camera()` return `None`. **Edit this first.** |
-| RTSP host / creds / port | `app/camera.py:35-37` | `<camera-ip>`, `[USERNAME]:[PASSWORD]`, `554`, path `/unicast/c1/s0/live` | Built into the URL as `f"rtsp://[USERNAME]:[PASSWORD]@{ip}:554/unicast/c1/s0/live"`. **Plaintext credentials in git.** |
+| RTSP host / creds / port | `app/camera.py:35-37` | placeholders — `"type your ip camera address here"`, `[USERNAME]`, `[PASSWORD]`, `[Port Number]` | URL template is `f"rtsp://[USERNAME]:[PASSWORD]@{ip}:[Port Number]/unicast/c1/s0/live"`. Fill these in before using `CAMERA_MODE = "ip"`. |
 | YOLO weights path | `app/detector.py:3` | `models/yolov8n.pt` | Relative. |
 | `conf` / `imgsz` / `classes` | `app/detector.py:9-11` | `0.20` / `416` / `[0]` | Detection sensitivity, inference size, COCO person class. |
 | `SIMILARITY_THRESHOLD` | `app/face_recognition.py:25` | `0.55` | Cosine similarity floor for an identity match. Raising it → more `Unknown`. |
@@ -579,33 +577,31 @@ Verified by reading the code and by running the safe parts of it. Items marked *
 5. **Person bounding boxes are never drawn.** `draw_box` is imported but unused.
 6. **No `Ctrl+C` handling** — an interrupt skips `stop_recording()` and leaves the MP4 un-finalized.
 7. **`exit conditions` are inconsistently implemented** across scripts: `q` everywhere except `test_face_recognition.py` (repo root), which uses key code `27` (`Esc`).
-8. **IP camera credentials are hardcoded in git** at `app/camera.py:37`.
-9. **The git remote URL embeds a GitHub Personal Access Token** (`https://ghp_...@github.com/emaanali-cs/VisionSense-AI.git`). **Rotate this token immediately** and switch the remote to a credential-free or SSH URL. It is not reproduced in this README.
-10. **Four `.pyc` files are tracked in git** under `app/__pycache__/`. Run `git rm -r --cached app/__pycache__`.
-11. **`FaceAnalysis("buffalo_l")` is instantiated twice** (`app/face_recognition.py:11` and `app/face_database.py:10`), doubling model load time and memory.
-12. **No `app/__init__.py`.** Importable only because Python 3.3+ namespace packages allow it. Fragile if the project is ever vendored or its layout changes.
-13. **Face images of real people are in the working tree** (46 images across 7 identities in `assets/staff_faces/`). They are correctly gitignored, but be deliberate about redistributing them.
-14. **No CI, no tests, no linter, no formatter config.** Every `test_*.py` is an interactive script with side effects — camera access, GUI windows, disk writes. `pytest` would try to import them and would open a camera. There is nothing to run in CI as written.
+8. **The git remote URL embeds a GitHub Personal Access Token** (`https://ghp_...@github.com/emaanali-cs/VisionSense-AI.git`). **Rotate this token immediately** and switch the remote to a credential-free or SSH URL. It is not reproduced in this README.
+9. **No `app/__init__.py`.** Importable only because Python 3.3+ namespace packages allow it. Fragile if the project is ever vendored or its layout changes.
+10. **`FaceAnalysis("buffalo_l")` is instantiated twice** (`app/face_recognition.py:11` and `app/face_database.py:10`), doubling model load time and memory.
+11. **Face images of real people are in the working tree** (46 images across 7 identities in `assets/staff_faces/`). They are correctly gitignored, but be deliberate about redistributing them.
+12. **No CI, no tests, no linter, no formatter config.** Every `test_*.py` is an interactive script with side effects — camera access, GUI windows, disk writes. `pytest` would try to import them and would open a camera. There is nothing to run in CI as written.
 
 **Behavioural notes**
 
-15. **The HUD person count is a YOLO box count**, not a count of identified faces (`main.py:103-111`). With `read_frame` discarding 2 of every 3 source frames, the count and FPS reflect processed frames, not camera frames.
-16. **The saved video is not a faithful capture.** `read_frame` drops two frames per iteration, so `output/*.mp4` is temporally sparse relative to the real camera stream.
-17. **Recognition is throttled to every 10th iteration and results are cached** (`main.py:208-212`). Consequently `unknown_present` (`main.py:258`) and the greeting latch act on a **stale** result, and a face box can be drawn for up to 9 frames after the person has left.
-18. **Only the single largest person is ever recognized** (`main.py:127-147`). A second, smaller person is counted in the HUD but never identified, and — because they are cropped out — will **not** trigger the greeting. Recognizable visitors standing behind others are silently missed.
-19. **Averaging embeddings** (`app/face_database.py:71-79`) collapses a person's appearance variation into one vector. Identities with few or low-diversity photos — `sir_abdul_salam` has exactly one image — will match poorly. This is inherent to the design, not a bug.
-20. **Every identity is matched in a linear scan** with no index (`app/face_recognition.py:63-75`). Fine at 7 identities; `O(n)` per face per recognition tick.
-21. **The greeting fires for *unknown* faces, not *known* ones** (`main.py:243`, `main.py:297-305`). Staff and enrolled students are labelled on screen but never greeted. The banner text and audio therefore describe a visitor welcome, which is consistent, but it is the opposite of what the project name ("greeting system") may suggest.
+13. **The HUD person count is a YOLO box count**, not a count of identified faces (`main.py:103-111`). With `read_frame` discarding 2 of every 3 source frames, the count and FPS reflect processed frames, not camera frames.
+14. **The saved video is not a faithful capture.** `read_frame` drops two frames per iteration, so `output/*.mp4` is temporally sparse relative to the real camera stream.
+15. **Recognition is throttled to every 10th iteration and results are cached** (`main.py:208-212`). Consequently `unknown_present` (`main.py:258`) and the greeting latch act on a **stale** result, and a face box can be drawn for up to 9 frames after the person has left.
+16. **Only the single largest person is ever recognized** (`main.py:127-147`). A second, smaller person is counted in the HUD but never identified, and — because they are cropped out — will **not** trigger the greeting. Recognizable visitors standing behind others are silently missed.
+17. **Averaging embeddings** (`app/face_database.py:71-79`) collapses a person's appearance variation into one vector. Identities with few or low-diversity photos — `sir_abdul_salam` has exactly one image — will match poorly. This is inherent to the design, not a bug.
+18. **Every identity is matched in a linear scan** with no index (`app/face_recognition.py:63-75`). Fine at 7 identities; `O(n)` per face per recognition tick.
+19. **The greeting fires for *unknown* faces, not *known* ones** (`main.py:243`, `main.py:297-305`). Staff and enrolled students are labelled on screen but never greeted. The banner text and audio therefore describe a visitor welcome, which is consistent, but it is the opposite of what the project name ("greeting system") may suggest.
 
 **Unverified — flagged, not asserted**
 
-22. **Mermaid diagram syntax is untested.** The `flowchart TD` block was written with every node label and subgraph title double-quoted to avoid parse errors from characters like `(640, 640)` and `[0]`, but it was not rendered through Mermaid. Please confirm it displays on GitHub.
-23. **Python versions other than 3.13.7 are untested.** The README badge says 3.13+; only 3.13.7 was actually exercised.
-24. **Non-Windows platforms are untested.** Everything was verified on Windows 11 with Python 3.13.7. Linux `apt` packages for GLib/GTK, ALSA/PulseAudio for `pygame.mixer`, and the `cv2.imshow` highgui backend are all unverified here. Headless operation is known not to work, since `cv2.imshow` and `pygame.mixer.init()` both need a display.
-25. **The `ip` camera branch was not exercised.** Only `CAMERA_MODE = "laptop"` was run. RTSP connectivity, the `CAP_FFMPEG` path, and the credentials are untested.
-26. **`main.py`'s live loop was not run end-to-end** (it blocks on a camera and a GUI). Its logic was verified by reading; the exact pixel output of the dashboard is unconfirmed.
-27. **Face-match accuracy is unmeasured.** `SIMILARITY_THRESHOLD = 0.55` is a hardcoded constant with no evaluation harness, no ROC curve, and no ground-truth test set. Whether it is well-calibrated is unknown.
-28. **`insightface` installability on a clean machine is unconfirmed.** Version `1.0.1` is installed here, but the repo pins nothing, and insightface is known to require a compiler on some Python/platform combinations.
+20. **Mermaid diagram syntax is untested.** The `flowchart TD` block was written with every node label and subgraph title double-quoted to avoid parse errors from characters like `(640, 640)` and `[0]`, but it was not rendered through Mermaid. Please confirm it displays on GitHub.
+21. **Python versions other than 3.13.7 are untested.** The README badge says 3.13+; only 3.13.7 was actually exercised.
+22. **Non-Windows platforms are untested.** Everything was verified on Windows 11 with Python 3.13.7. Linux `apt` packages for GLib/GTK, ALSA/PulseAudio for `pygame.mixer`, and the `cv2.imshow` highgui backend are all unverified here. Headless operation is known not to work, since `cv2.imshow` and `pygame.mixer.init()` both need a display.
+23. **The `ip` camera branch was not exercised.** Only `CAMERA_MODE = "laptop"` was run. RTSP connectivity, the `CAP_FFMPEG` path, and the credentials are untested.
+24. **`main.py`'s live loop was not run end-to-end** (it blocks on a camera and a GUI). Its logic was verified by reading; the exact pixel output of the dashboard is unconfirmed.
+25. **Face-match accuracy is unmeasured.** `SIMILARITY_THRESHOLD = 0.55` is a hardcoded constant with no evaluation harness, no ROC curve, and no ground-truth test set. Whether it is well-calibrated is unknown.
+26. **`insightface` installability on a clean machine is unconfirmed.** Version `1.0.1` is installed here, but the repo pins nothing, and insightface is known to require a compiler on some Python/platform combinations.
 
 ---
 
@@ -617,7 +613,7 @@ A few notes that will save you time:
 
 - **Please do not commit face images or the `assets/` directory.** `.gitignore` already covers it; keep it that way.
 - **`app/camera.py` line 11 is the switch you will want first** if you are testing on your own hardware.
-- **Do not add real camera credentials.** Pull the RTSP host and password out of `app/camera.py:35-37` into an env var if you touch that code — and rotate the existing ones.
+- **Do not commit real camera credentials.** `app/camera.py:35-37` ships as placeholders; keep it that way, and prefer pulling the RTSP host and password into an env var if you touch that code.
 - Real bugs worth filing: person boxes are never drawn, the `assets/` clone problem, the broken `tests/test_tts.py`, and the missing dependency declarations.
 
 ---

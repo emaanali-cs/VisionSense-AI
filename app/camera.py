@@ -32,9 +32,9 @@ def open_camera():
 
     elif CAMERA_MODE == "ip":
 
-        ip = "<camera-ip>"
+        ip = "type your ip camera address here"
 
-        url = f"rtsp://[USERNAME]:[PASSWORD]@{ip}:554/unicast/c1/s0/live"
+        url = f"rtsp://[USERNAME]:[PASSWORD]@{ip}:[Port Number]/unicast/c1/s0/live"
 
         cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
 
